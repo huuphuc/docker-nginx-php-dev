@@ -1,8 +1,8 @@
-FROM ubuntu:19.10
+FROM ubuntu:20.04
 
 MAINTAINER Phucnh <phucbkit@gmail.com>
 
-ENV PHP_VERSION=7.3 \
+ENV PHP_VERSION=7.4 \
     WORKDIR=/var/www/dev \
     DOCROOT=/var/www/dev/public \
     DEBIAN_FRONTEND=noninteractive
@@ -53,7 +53,7 @@ RUN mkdir -p /run/php
 COPY supervisor.conf /etc/supervisor/conf.d/supervisor.conf
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY default.conf /etc/nginx/conf.d
-COPY run.sh /run.sh
-RUN chmod 755 /run.sh
+# COPY run.sh /run.sh
+# RUN chmod 755 /run.sh
 
 CMD ["/usr/bin/supervisord"]
