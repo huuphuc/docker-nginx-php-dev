@@ -2,14 +2,16 @@ FROM ubuntu:20.04
 
 MAINTAINER Phucnh <phucbkit@gmail.com>
 
-ENV PHP_VERSION=7.4 \
+ENV PHP_VERSION=8.0 \
     WORKDIR=/var/www/dev \
     DOCROOT=/var/www/dev/public \
     DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get -y dist-upgrade && \
-    apt-get install -y --no-install-recommends --no-install-suggests vim ca-certificates curl unzip git supervisor \
+    apt-get install -y --no-install-recommends --no-install-suggests vim ca-certificates apt-transport-https software-properties-common curl unzip git supervisor && \
+    add-apt-repository ppa:ondrej/php && \
+    apt-get install -y \
     nginx \
     php${PHP_VERSION} \
     php${PHP_VERSION}-fpm \
@@ -21,7 +23,6 @@ RUN apt-get update && \
     php${PHP_VERSION}-curl \
     php${PHP_VERSION}-gd \
     php${PHP_VERSION}-intl \
-    php${PHP_VERSION}-json \
     php${PHP_VERSION}-mbstring \
     php${PHP_VERSION}-opcache \
     php${PHP_VERSION}-readline \
