@@ -7,11 +7,14 @@ ENV PHP_VERSION=8.0 \
     DOCROOT=/var/www/dev/public \
     DEBIAN_FRONTEND=noninteractive
 
+#ENV TEST_TOOL=chromium-chromedriver firefox-geckodriver chromium-browser
+ENV TEST_TOOL=
+
 RUN apt-get update && \
     apt-get -y dist-upgrade && \
     apt-get install -y --no-install-recommends --no-install-suggests vim ca-certificates apt-transport-https software-properties-common curl unzip git supervisor && \
-    add-apt-repository ppa:ondrej/php && \
-    apt-get install -y \
+    add-apt-repository ppa:ondrej/php && add-apt-repository ppa:saiarcot895/chromium-dev && apt-get update -y && \
+    apt-get install -y ${TEST_TOOL} \
     nginx \
     php${PHP_VERSION} \
     php${PHP_VERSION}-fpm \
@@ -47,13 +50,15 @@ RUN mkdir -p ${DOCROOT}
 
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log \
-    && ln -sf /dev/stderr /var/log/php-fpm.log
+    && ln -sf /dev/stderr /var/log/php${PHP_VERSION}-fpm.log
 
 RUN mkdir -p /run/php
 
 COPY supervisor.conf /etc/supervisor/conf.d/supervisor.conf
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY default.conf /etc/nginx/conf.d
+COPY index.php ${DOCROOT}/index.php
+
 # COPY run.sh /run.sh
 # RUN chmod 755 /run.sh
 
