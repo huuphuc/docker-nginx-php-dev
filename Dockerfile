@@ -57,7 +57,7 @@ RUN mkdir -p /run/php
 COPY supervisor.conf /etc/supervisor/conf.d/supervisor.conf
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY default.conf /etc/nginx/conf.d
-COPY www.conf /etc/php/php/${PHP_VERSION}/fpm/pool.d/www.conf
+COPY www.conf /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf
 COPY index.php ${DOCROOT}/index.php
 
 # COPY run.sh /run.sh
