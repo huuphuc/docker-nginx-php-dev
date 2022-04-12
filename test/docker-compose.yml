@@ -8,4 +8,4 @@ services:
     environment:
       APP_DEBUG: "true"
     ports:
-      - 127.0.0.1:8088:80
+      - "127.0.0.1:8088:80"

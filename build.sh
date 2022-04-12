@@ -1,8 +1,14 @@
 #!/bin/bash
 
-VERSION="2.0.3"
+PHP_VERSION=$1
+if [ "${PHP_VERSION}" == "" ]; then
+  PHP_VERSION=7.4
+fi
+VERSION="${PHP_VERSION}-v1.0"
 
-docker build -t php-dev . && \
+echo "Building PHP-${PHP_VERSION}..."
+
+docker build -t php-dev . --build-arg PHP_VERSION=${PHP_VERSION} && \
 docker tag php-dev huuphuc/php-dev:${VERSION} && \
 docker push huuphuc/php-dev:${VERSION} && \
 docker tag php-dev huuphuc/php-dev:latest && \

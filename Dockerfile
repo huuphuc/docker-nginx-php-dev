@@ -2,19 +2,17 @@ FROM ubuntu:20.04
 
 MAINTAINER Phucnh <phucbkit@gmail.com>
 
-ENV PHP_VERSION=8.0 \
-    WORKDIR=/var/www/dev \
+ARG PHP_VERSION=8.1
+ENV WORKDIR=/var/www/dev \
     DOCROOT=/var/www/dev/public \
     DEBIAN_FRONTEND=noninteractive
 
-#ENV TEST_TOOL=chromium-chromedriver firefox-geckodriver chromium-browser
-ENV TEST_TOOL=
+RUN echo "PHP-${PHP_VERSION}"
 
-RUN apt-get update && \
-    apt-get -y dist-upgrade && \
+RUN apt-get update && apt-get -y dist-upgrade && \
     apt-get install -y --no-install-recommends --no-install-suggests vim ca-certificates apt-transport-https software-properties-common curl unzip git supervisor && \
-    add-apt-repository ppa:ondrej/php && add-apt-repository ppa:saiarcot895/chromium-dev && apt-get update -y && \
-    apt-get install -y ${TEST_TOOL} \
+    add-apt-repository ppa:ondrej/php && apt-get update -y && \
+    apt-get install -y \
     nginx \
     php${PHP_VERSION} \
     php${PHP_VERSION}-fpm \
@@ -32,8 +30,8 @@ RUN apt-get update && \
     php${PHP_VERSION}-soap \
     php${PHP_VERSION}-xml \
     php${PHP_VERSION}-zip \
-    php-redis \
-    php-imagick && \
+    php${PHP_VERSION}-redis \
+    php${PHP_VERSION}-imagick && \
     curl -sS https://getcomposer.org/installer | php && \
     mv composer.phar /usr/local/bin/composer && \
     apt-get -y autoremove && \
@@ -48,9 +46,17 @@ RUN mkdir -p /etc/nginx/conf.d
 RUN mkdir -p ${WORKDIR}
 RUN mkdir -p ${DOCROOT}
 
-RUN ln -sf /dev/stdout /var/log/nginx/access.log \
+#RUN update-alternatives --set php /usr/bin/php${PHP_VERSION}
+#RUN update-alternatives --set phar /usr/bin/phar${PHP_VERSION}
+#RUN update-alternatives --set phar.phar /usr/bin/phar.phar${PHP_VERSION}
+#RUN update-alternatives --set phpize /usr/bin/phpize${PHP_VERSION}
+#RUN update-alternatives --set php-config /usr/bin/php-config${PHP_VERSION}
+
+RUN ln -sf /usr/sbin/php-fpm${PHP_VERSION} /usr/sbin/php-fpm \
+    && ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log \
-    && ln -sf /dev/stderr /var/log/php${PHP_VERSION}-fpm.log
+    && ln -sf /dev/stderr /var/log/php${PHP_VERSION}-fpm.log \
+    && ln -sf /dev/stderr /var/log/php-fpm.log
 
 RUN mkdir -p /run/php
 
@@ -59,8 +65,5 @@ COPY nginx.conf /etc/nginx/nginx.conf
 COPY default.conf /etc/nginx/conf.d
 COPY www.conf /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf
 COPY index.php ${DOCROOT}/index.php
-
-# COPY run.sh /run.sh
-# RUN chmod 755 /run.sh
 
 CMD ["/usr/bin/supervisord"]
