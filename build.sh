@@ -4,7 +4,7 @@ PHP_VERSION=$1
 if [ "${PHP_VERSION}" == "" ]; then
   PHP_VERSION=7.4
 fi
-VERSION="${PHP_VERSION}-v1.0"
+VERSION="${PHP_VERSION}-v1.1"
 
 echo "Building PHP-${PHP_VERSION}..."
 
