@@ -1,21 +1,23 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 MAINTAINER Phucnh <phucbkit@gmail.com>
 
-ARG PHP_VERSION=8.1
+ARG PHP_VERSION=8.2
 ENV WORKDIR=/var/www/dev \
     DOCROOT=/var/www/dev/public \
     DEBIAN_FRONTEND=noninteractive
 
 RUN echo "PHP-${PHP_VERSION}"
 
-RUN apt-get update && apt-get -y dist-upgrade && \
-    apt-get install -y --no-install-recommends --no-install-suggests vim ca-certificates apt-transport-https software-properties-common curl unzip git supervisor && \
-    add-apt-repository ppa:ondrej/php && apt-get update -y && \
-    apt-get install -y \
+RUN apt update && apt -y upgrade && \
+    apt-get install -y --no-install-recommends --no-install-suggests vim curl unzip git supervisor
+RUN apt install -y lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common && \
+    add-apt-repository ppa:ondrej/php && apt update -y
+RUN apt install -y \
     nginx \
     php${PHP_VERSION} \
     php${PHP_VERSION}-fpm \
+    php${PHP_VERSION}-common \
     php${PHP_VERSION}-mysql \
     php${PHP_VERSION}-gmp \
     php${PHP_VERSION}-bcmath \
