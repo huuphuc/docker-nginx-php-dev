@@ -2,7 +2,7 @@ FROM ubuntu:22.04
 
 MAINTAINER Phucnh <phucbkit@gmail.com>
 
-ARG PHP_VERSION=8.2
+ARG PHP_VERSION=8.4
 ENV WORKDIR=/var/www/dev \
     DOCROOT=/var/www/dev/public \
     DEBIAN_FRONTEND=noninteractive
@@ -66,6 +66,10 @@ COPY supervisor.conf /etc/supervisor/conf.d/supervisor.conf
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY default.conf /etc/nginx/conf.d
 COPY www.conf /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf
+COPY 99-opcache.ini /etc/php/${PHP_VERSION}/cli/conf.d/99-opcache.ini
+COPY 99-opcache.ini /etc/php/${PHP_VERSION}/fpm/conf.d/99-opcache.ini
+COPY 99-memory.ini /etc/php/${PHP_VERSION}/cli/conf.d/99-memory.ini
+COPY 99-memory.ini /etc/php/${PHP_VERSION}/fpm/conf.d/99-memory.ini
 COPY index.php ${DOCROOT}/index.php
 
 CMD ["/usr/bin/supervisord"]

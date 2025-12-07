@@ -2,7 +2,7 @@ version: "3.5"
 services:
   php:
     working_dir: /var/www/dev
-    image: php-dev
+    image: php-dev:latest
     volumes:
       - .:/var/www/dev:cached
     environment:
