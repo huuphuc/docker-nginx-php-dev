@@ -1,0 +1,65 @@
+# Smoke test for the image, run by build.sh with dgoss.
+# The container is started with EXPECTED_PHP_VERSION (e.g. 8.5) and PHP_MEMORY_LIMIT=321M.
+port:
+  tcp:80:
+    listening: true
+
+http:
+  http://localhost/:
+    status: 200
+    timeout: 5000
+    body:
+      - "It works! PHP {{.Env.EXPECTED_PHP_VERSION}}."
+
+command:
+  nginx and php-fpm run under supervisor:
+    exec: supervisorctl status
+    exit-status: 0
+    stdout:
+      - "/^nginx +RUNNING/"
+      - "/^php-fpm +RUNNING/"
+
+  CLI runs the expected PHP version:
+    exec: php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;'
+    exit-status: 0
+    stdout:
+      - "/^{{.Env.EXPECTED_PHP_VERSION}}$/"
+
+  custom php.ini is loaded for the CLI:
+    exec: php -r 'echo ini_get("display_errors");'
+    exit-status: 0
+    stdout:
+      - "/^1$/"
+
+  PHP_MEMORY_LIMIT reaches the CLI:
+    exec: php -r 'echo ini_get("memory_limit");'
+    exit-status: 0
+    stdout:
+      - "/^321M$/"
+
+  PHP_MEMORY_LIMIT reaches PHP-FPM:
+    exec: sh -c 'echo "<?php echo ini_get(\"memory_limit\");" > /var/www/dev/public/_ini.php && curl -fsS http://localhost/_ini.php'
+    exit-status: 0
+    stdout:
+      - "/^321M$/"
+
+  code changes show up without a restart:
+    exec: >-
+      sh -c 'f=/var/www/dev/public/_reload.php;
+      echo "<?php echo 1;" > $f && curl -fsS http://localhost/_reload.php && sleep 1.1 &&
+      echo "<?php echo 2;" > $f && curl -fsS http://localhost/_reload.php'
+    exit-status: 0
+    stdout:
+      - "/^12$/"
+
+  required extensions are loaded:
+    exec: php -m
+    exit-status: 0
+    stdout:
+      - "/^redis$/"
+      - "/^imagick$/"
+      - "/^Zend OPcache$/"
+
+  composer runs:
+    exec: composer --version
+    exit-status: 0

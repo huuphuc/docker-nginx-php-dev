@@ -26,6 +26,15 @@ jobs:
       - id: vars
         run: echo "versions=$(jq -c . .github/php-versions.json)" >> "$GITHUB_OUTPUT"
 
+  lint:
+    name: Lint Dockerfile
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hadolint/hadolint-action@v3.5.0
+        with:
+          dockerfile: Dockerfile
+
   test:
     name: PHP ${{ matrix.php }} (${{ matrix.arch }})
     needs: prepare
@@ -56,4 +65,12 @@ jobs:
           cache-to: type=gha,mode=max,scope=php${{ matrix.php }}-${{ matrix.arch }}
 
       - name: Smoke test
-        run: ./test.sh "${{ matrix.php }}"
+        run: TEST_ONLY=1 ./build.sh "${{ matrix.php }}"
+
+      - name: Vulnerability scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: php-dev
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"

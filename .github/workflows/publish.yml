@@ -6,7 +6,8 @@
 #   <php>-<YYYYMMDD>, <php>, and latest (highest supported version only).
 #
 # Images are always built without cache so they pick up the latest PHP and
-# Ubuntu packages. Nothing is tagged unless every build and test passes.
+# Ubuntu packages. Nothing is tagged unless every build, test and vulnerability
+# scan (CRITICAL/HIGH with a fix available) passes.
 name: Publish
 
 on:
@@ -104,7 +105,7 @@ jobs:
 
       - name: Smoke test
         run: |
-          ./test.sh "${{ matrix.php }}"
+          TEST_ONLY=1 ./build.sh "${{ matrix.php }}"
           # "<php> <nginx package> <ubuntu>", e.g. "8.5.12 1.18.0-6ubuntu14.6 22.04.5"
           info=$(docker run --rm php-dev sh -c \
             'echo "$(php -r "echo PHP_VERSION;") $(dpkg-query -W -f="\${Version}" nginx) $(. /etc/os-release; echo "${VERSION%% *}")"')
@@ -119,6 +120,14 @@ jobs:
           path: /tmp/image-info/*
           if-no-files-found: error
           retention-days: 1
+
+      - name: Vulnerability scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: php-dev
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
 
       # Same build as above, served from the builder's local cache.
       - name: Push by digest

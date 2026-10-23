@@ -1,7 +1,0 @@
-services:
-  php:
-    image: php-dev
-    environment:
-      PHP_MEMORY_LIMIT: 321M
-    ports:
-      - "127.0.0.1:8088:80"

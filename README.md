@@ -117,12 +117,14 @@ hosts. Use `docker compose exec -u www-data php ...`, or fix ownership afterward
 ## Building locally
 
 ```bash
-./build.sh        # build and test the default version (ARG PHP_VERSION in the Dockerfile, currently 8.5)
-./build.sh 8.3    # build and test PHP 8.3
-./test.sh 8.3     # re-run the smoke test against the locally built "php-dev" image
+./build.sh                  # build and test the default version (ARG PHP_VERSION in the Dockerfile, currently 8.5)
+./build.sh 8.3              # build and test PHP 8.3
+TEST_ONLY=1 ./build.sh 8.3  # re-test the locally built "php-dev" image without rebuilding
 ```
 
-Local builds are tagged `php-dev` and are never pushed.
+Tests are [goss](https://github.com/goss-org/goss) checks in [`goss.yaml`](goss.yaml), run with dgoss against a
+fresh container. `build.sh` downloads goss into `~/.cache/goss` the first time. Local builds are tagged
+`php-dev` and are never pushed.
 
 ## Releasing (maintainers)
 
@@ -135,7 +137,8 @@ build and test every version on both architectures, but publish nothing.
 - **Rebuild for PHP/Ubuntu updates:** Actions → **Publish** → **Run workflow**, optionally with a
   comma-separated list of versions (e.g. `8.5`). Publishes `<php>-<YYYYMMDD>` and `<php>`.
 
-Nothing is tagged on Docker Hub unless every selected version builds and passes `test.sh` on both
+Pull requests also lint the Dockerfile with hadolint. Nothing is tagged on Docker Hub unless every selected
+version builds, passes `goss.yaml` and has no CRITICAL/HIGH vulnerability with an available fix (Trivy) on both
 architectures. Supported versions are listed in [`.github/php-versions.json`](.github/php-versions.json);
 `latest` always points at the highest one. `ARG PHP_VERSION` in the [`Dockerfile`](Dockerfile) is only the default for local builds.
 Each publish also copies this README to the Docker Hub description and updates the PHP version table above.
