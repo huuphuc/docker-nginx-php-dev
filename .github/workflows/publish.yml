@@ -1,0 +1,262 @@
+# Build, test and publish huuphuc/php-dev (linux/amd64 + linux/arm64).
+#
+# - Push a git tag "v*" (e.g. v1.1.0): publishes every supported version as
+#   <php>-<git tag>, <php>, and latest (highest supported version only).
+# - Run manually from the Actions tab: publishes the chosen versions as
+#   <php>-<YYYYMMDD>, <php>, and latest (highest supported version only).
+#
+# Images are always built without cache so they pick up the latest PHP and
+# Ubuntu packages. Nothing is tagged unless every build and test passes.
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      php_versions:
+        description: 'PHP versions to publish, comma-separated (e.g. "8.5" or "8.4,8.5"). Leave empty for all supported versions.'
+        required: false
+        default: ""
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: huuphuc/php-dev
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      versions: ${{ steps.vars.outputs.versions }}
+      suffix: ${{ steps.vars.outputs.suffix }}
+      latest: ${{ steps.vars.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: vars
+        env:
+          INPUT_VERSIONS: ${{ inputs.php_versions }}
+        run: |
+          set -euo pipefail
+          supported=$(jq -c . .github/php-versions.json)
+          if [[ -n "${INPUT_VERSIONS// /}" ]]; then
+            versions=$(jq -cn --arg v "$INPUT_VERSIONS" '$v | split(",") | map(gsub("\\s"; "")) | map(select(length > 0)) | unique')
+            unknown=$(jq -cn --argjson v "$versions" --argjson s "$supported" '$v - $s')
+            if [[ "$unknown" != "[]" ]]; then
+              echo "::error::Unsupported PHP version(s) $unknown. Supported versions are $supported (.github/php-versions.json). Nothing was built or published."
+              exit 1
+            fi
+          else
+            versions=$supported
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            suffix=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9_.-' '-')
+          else
+            suffix=$(date -u +%Y%m%d)
+          fi
+
+          {
+            echo "versions=$versions"
+            echo "suffix=$suffix"
+            echo "latest=$(jq -r 'sort_by(split(".") | map(tonumber)) | last' .github/php-versions.json)"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build PHP ${{ matrix.php }} (${{ matrix.arch }})
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        php: ${{ fromJSON(needs.prepare.outputs.versions) }}
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build for test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          pull: true
+          no-cache: true
+          tags: php-dev
+          build-args: PHP_VERSION=${{ matrix.php }}
+
+      - name: Smoke test
+        run: |
+          ./test.sh "${{ matrix.php }}"
+          # "<php> <nginx package> <ubuntu>", e.g. "8.5.12 1.18.0-6ubuntu14.6 22.04.5"
+          info=$(docker run --rm php-dev sh -c \
+            'echo "$(php -r "echo PHP_VERSION;") $(dpkg-query -W -f="\${Version}" nginx) $(. /etc/os-release; echo "${VERSION%% *}")"')
+          echo "PHP ${{ matrix.php }} (${{ matrix.arch }}): ${info}" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p /tmp/image-info
+          printf '%s\n' "${info}" > "/tmp/image-info/${{ matrix.php }}"
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.arch == 'amd64'
+        with:
+          name: image-info-${{ matrix.php }}
+          path: /tmp/image-info/*
+          if-no-files-found: error
+          retention-days: 1
+
+      # Same build as above, served from the builder's local cache.
+      - name: Push by digest
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          build-args: PHP_VERSION=${{ matrix.php }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ matrix.php }}-${{ needs.prepare.outputs.suffix }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.php }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish PHP ${{ matrix.php }}
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        php: ${{ fromJSON(needs.prepare.outputs.versions) }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.php }}-*
+          merge-multiple: true
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Create multi-arch tags
+        working-directory: /tmp/digests
+        env:
+          PHP: ${{ matrix.php }}
+          SUFFIX: ${{ needs.prepare.outputs.suffix }}
+          LATEST_PHP: ${{ needs.prepare.outputs.latest }}
+        run: |
+          set -euo pipefail
+          pinned="$IMAGE:$PHP-$SUFFIX"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]] && docker buildx imagetools inspect "$pinned" >/dev/null 2>&1; then
+            echo "::error::$pinned already exists on Docker Hub. Release tags are never overwritten; push a new git tag instead. Nothing was changed for PHP $PHP."
+            exit 1
+          fi
+
+          tags=("$IMAGE:$PHP" "$pinned")
+          if [[ "$PHP" == "$LATEST_PHP" ]]; then
+            tags+=("$IMAGE:latest")
+          fi
+
+          args=()
+          for tag in "${tags[@]}"; do args+=(-t "$tag"); done
+          for digest in *; do args+=("$IMAGE@sha256:$digest"); done
+          docker buildx imagetools create "${args[@]}"
+          docker buildx imagetools inspect "$pinned"
+
+          {
+            echo "### PHP $PHP"
+            for tag in "${tags[@]}"; do echo "- \`$tag\`"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  docs:
+    name: Update README and Docker Hub description
+    needs: [prepare, publish]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: /tmp/image-info
+          pattern: image-info-*
+          merge-multiple: true
+
+      - name: Release note table
+        env:
+          SUFFIX: ${{ needs.prepare.outputs.suffix }}
+          LATEST_PHP: ${{ needs.prepare.outputs.latest }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Versions (copy into the release note)"
+            echo
+            echo "| Tag | PHP | Nginx | Ubuntu |"
+            echo "| --- | --- | --- | --- |"
+            for minor in $(jq -r '.[]' .github/php-versions.json); do
+              [[ -f "/tmp/image-info/$minor" ]] || continue
+              read -r php nginx ubuntu < "/tmp/image-info/$minor"
+              tags="\`$minor-$SUFFIX\`, \`$minor\`"
+              if [[ "$minor" == "$LATEST_PHP" ]]; then tags+=", \`latest\`"; fi
+              echo "| $tags | $php | $nginx | $ubuntu |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Commits made with GITHUB_TOKEN do not trigger other workflows.
+      - name: Update PHP versions in README
+        env:
+          LATEST_PHP: ${{ needs.prepare.outputs.latest }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/update-php-versions.py README.md .github/php-versions.json "$LATEST_PHP" /tmp/image-info
+          if git diff --quiet README.md; then
+            echo "README already lists these PHP versions."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "README: update PHP versions"
+          git push origin HEAD:main
+
+      # Requires a Docker Hub token with Read, Write, Delete scope.
+      - uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.IMAGE }}
+          short-description: Nginx + PHP-FPM image for local development
+          enable-url-completion: true
