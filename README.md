@@ -16,10 +16,10 @@ Every tag is available for `linux/amd64` and `linux/arm64`. Current PHP version 
 <!-- php-versions:start -->
 | Tag | PHP |
 | --- | --- |
-| `8.2` | not published yet |
-| `8.3` | not published yet |
-| `8.4` | not published yet |
-| `8.5`, `latest` | not published yet |
+| `8.2` | 8.2.35 |
+| `8.3` | 8.3.36 |
+| `8.4` | 8.4.27 |
+| `8.5`, `latest` | 8.5.12 |
 <!-- php-versions:end -->
 
 | Tag | Meaning |
