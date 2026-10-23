@@ -51,4 +51,11 @@ echo "OK   cli: custom php.ini loaded"
 "${DC[@]}" exec -T php composer --version >/dev/null 2>&1 || fail "composer is not runnable"
 echo "OK   composer installed"
 
+# test/docker-compose.yml sets PHP_MEMORY_LIMIT=321M
+"${DC[@]}" exec -T php sh -c 'echo "<?php echo ini_get(\"memory_limit\");" > /var/www/dev/public/_ini.php'
+[[ $(curl -fsS "${URL}/_ini.php") == "321M" ]] || fail "PHP_MEMORY_LIMIT is not applied to the web server"
+[[ $("${DC[@]}" exec -T php php -r 'echo ini_get("memory_limit");') == "321M" ]] \
+  || fail "PHP_MEMORY_LIMIT is not applied to the CLI"
+echo "OK   PHP_MEMORY_LIMIT applied (web + cli)"
+
 echo "PASS"
