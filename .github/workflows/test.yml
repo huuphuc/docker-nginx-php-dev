@@ -1,0 +1,59 @@
+# Build and smoke-test the image for every supported PHP version and architecture.
+# Nothing is pushed to Docker Hub.
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      versions: ${{ steps.vars.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: vars
+        run: echo "versions=$(jq -c . .github/php-versions.json)" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: PHP ${{ matrix.php }} (${{ matrix.arch }})
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ${{ fromJSON(needs.prepare.outputs.versions) }}
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: php-dev
+          build-args: PHP_VERSION=${{ matrix.php }}
+          cache-from: type=gha,scope=php${{ matrix.php }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=php${{ matrix.php }}-${{ matrix.arch }}
+
+      - name: Smoke test
+        run: ./test.sh "${{ matrix.php }}"
