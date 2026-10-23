@@ -1,0 +1,4 @@
+ignored:
+  # Unpinned apt packages are intentional: the image should pick up the latest
+  # PHP and Ubuntu patch releases on every build.
+  - DL3008

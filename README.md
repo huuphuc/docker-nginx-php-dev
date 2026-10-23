@@ -5,7 +5,7 @@ Docker Hub: [`huuphuc/php-dev`](https://hub.docker.com/r/huuphuc/php-dev) ·
 Source: [`huuphuc/docker-nginx-php-dev`](https://github.com/huuphuc/docker-nginx-php-dev)
 
 > **Development only.** Errors are displayed in the browser (`display_errors = On`,
-> `error_reporting = E_ALL`) and `memory_limit` is unlimited.
+> `error_reporting = E_ALL`) and `memory_limit` is unlimited by default.
 > Do not use it for staging or production.
 
 ## Tags
@@ -74,10 +74,30 @@ docker compose exec php php -v
 ## Configuration
 
 **PHP settings.** The image's overrides live in `/etc/php/<version>/{fpm,cli}/conf.d/99-custom.ini`
-(see [`configs/php.ini`](configs/php.ini)): errors displayed, unlimited `memory_limit`, 100M upload/post
-limit, and OPcache enabled. OPcache checks files on every request, so code changes show up without a
-restart. To change settings, mount your own ini file into both directories, for example
+(see [`configs/php.ini`](configs/php.ini)): errors displayed, limits from the environment variables below,
+and OPcache enabled. OPcache checks files on every request, so code changes show up without a
+restart. For any other setting, mount your own ini file into both directories, for example
 `-v ./my.ini:/etc/php/8.5/fpm/conf.d/zz-my.ini`, and restart the container.
+
+**Environment variables.** Common PHP limits can be set per project without an ini file. They apply
+to the web server and the CLI. Recreate the container after changing them (`docker compose up -d`).
+
+| Variable | php.ini setting | Default |
+| --- | --- | --- |
+| `PHP_MEMORY_LIMIT` | `memory_limit` | `-1` (unlimited) |
+| `PHP_UPLOAD_MAX_FILESIZE` | `upload_max_filesize` | `100M` |
+| `PHP_POST_MAX_SIZE` | `post_max_size` | `100M` |
+
+```yaml
+services:
+  php:
+    image: huuphuc/php-dev:8.5
+    environment:
+      PHP_MEMORY_LIMIT: 512M
+```
+
+Nginx accepts request bodies up to 100M (`client_max_body_size`), so uploads larger than that are
+rejected by nginx even if you raise the PHP limits.
 
 **Nginx.** The site config is `/etc/nginx/conf.d/default.conf` (see [`configs/default.conf`](configs/default.conf)).
 Mount your own file over it to change it. Uploads are limited to 100M (`client_max_body_size`).
@@ -97,12 +117,14 @@ hosts. Use `docker compose exec -u www-data php ...`, or fix ownership afterward
 ## Building locally
 
 ```bash
-./build.sh        # build and test the default version (ARG PHP_VERSION in the Dockerfile, currently 8.5)
-./build.sh 8.3    # build and test PHP 8.3
-./test.sh 8.3     # re-run the smoke test against the locally built "php-dev" image
+./build.sh                  # build and test the default version (ARG PHP_VERSION in the Dockerfile, currently 8.5)
+./build.sh 8.3              # build and test PHP 8.3
+TEST_ONLY=1 ./build.sh 8.3  # re-test the locally built "php-dev" image without rebuilding
 ```
 
-Local builds are tagged `php-dev` and are never pushed.
+Tests are [goss](https://github.com/goss-org/goss) checks in [`goss.yaml`](goss.yaml), run with dgoss against a
+fresh container. `build.sh` downloads goss into `~/.cache/goss` the first time. Local builds are tagged
+`php-dev` and are never pushed.
 
 ## Releasing (maintainers)
 
@@ -115,7 +137,8 @@ build and test every version on both architectures, but publish nothing.
 - **Rebuild for PHP/Ubuntu updates:** Actions → **Publish** → **Run workflow**, optionally with a
   comma-separated list of versions (e.g. `8.5`). Publishes `<php>-<YYYYMMDD>` and `<php>`.
 
-Nothing is tagged on Docker Hub unless every selected version builds and passes `test.sh` on both
+Pull requests also lint the Dockerfile with hadolint. Nothing is tagged on Docker Hub unless every selected
+version builds, passes `goss.yaml` and has no CRITICAL/HIGH vulnerability with an available fix (Trivy) on both
 architectures. Supported versions are listed in [`.github/php-versions.json`](.github/php-versions.json);
 `latest` always points at the highest one. `ARG PHP_VERSION` in the [`Dockerfile`](Dockerfile) is only the default for local builds.
 Each publish also copies this README to the Docker Hub description and updates the PHP version table above.
